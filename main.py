@@ -1,29 +1,63 @@
 import pandas as pd
 
-# 1. Criar o intervalo sequencial para a coluna SORT (1 a 10.000)
-sort_column = list(range(1, 10001))
+# Nome do arquivo
+file_name = 'Planilha_Sorteio_Estatistico_V2.xlsx'
 
-# 2. Criar o DataFrame com a coluna inicial
-df = pd.DataFrame({'SORT': sort_column})
-
-# 3. Adicionar as colunas de 1 a 5 vazias (conforme solicitado: sem preencher TRUE/FALSE)
-# Usamos None para que as células fiquem prontas para a entrada manual
+# 1. Configuração da Aba SORTEIO (Base de dados)
+num_rows = 10000
+sort_data = {'SORT': list(range(1, num_rows + 1))}
 for i in range(1, 6):
-    df[str(i)] = None
+    sort_data[str(i)] = [None] * num_rows # Colunas vazias para preenchimento manual
 
-# 4. Definir o nome do arquivo
-file_name = 'Planilha_Sorteio_Estatistico.xlsx'
+df_sorteio = pd.DataFrame(sort_data)
 
-# 5. Gerar a planilha com a aba renomeada para SORTEIO
+# 2. Gerar o arquivo com o motor XlsxWriter para inserir fórmulas
 with pd.ExcelWriter(file_name, engine='xlsxwriter') as writer:
-    df.to_excel(writer, sheet_name='SORTEIO', index=False)
+    # Salva a aba SORTEIO
+    df_sorteio.to_excel(writer, sheet_name='SORTEIO', index=False)
     
-    # Acessar o objeto workbook e worksheet para ajustes finos (opcional)
     workbook  = writer.book
-    worksheet = writer.sheets['SORTEIO']
-    
-    # Ajustar a largura das colunas para melhor visualização
-    worksheet.set_column('A:A', 10)  # Coluna SORT
-    worksheet.set_column('B:F', 8)   # Colunas 1 a 5
+    sheet_sorteio = writer.sheets['SORTEIO']
+    sheet_analise = workbook.add_worksheet('ANALISE')
 
-print(f"Planilha '{file_name}' criada com sucesso!")
+    # Cabeçalhos da aba ANALISE
+    headers = ['SORT', '1', '2', '3', '4', '5', 'CONTAGEM', 'ESTUDO']
+    for col_num, header in enumerate(headers):
+        sheet_analise.write(0, col_num, header)
+
+    # 3. Preenchimento da aba ANALISE com fórmulas dinâmicas
+    for row in range(1, num_rows + 1):
+        # Excel usa base 1 para linhas (row + 1)
+        xl_row = row + 1
+        
+        # Colunas A a F: Espelhamento da aba SORTEIO
+        # Ex: =SORTEIO!A2
+        for col_idx in range(6): 
+            col_letter = chr(65 + col_idx) # A, B, C, D, E, F
+            sheet_analise.write_formula(row, col_idx, f"=SORTEIO!{col_letter}{xl_row}")
+
+        # Coluna G: CONTAGEM
+        # Lógica: Concatena o número se a célula for TRUE, e remove espaços extras com TRIM
+        formula_contagem = (
+            f"=TRIM("
+            f"IF(B{xl_row}=TRUE; \"1 \"; \"\") & "
+            f"IF(C{xl_row}=TRUE; \"2 \"; \"\") & "
+            f"IF(D{xl_row}=TRUE; \"3 \"; \"\") & "
+            f"IF(E{xl_row}=TRUE; \"4 \"; \"\") & "
+            f"IF(F{xl_row}=TRUE; \"5 \"; \"\")"
+            f")"
+        )
+        sheet_analise.write_formula(row, 6, formula_contagem)
+
+        # Coluna H: ESTUDO (Contagem Incremental)
+        # Lógica: COUNTIF desde o topo até a linha atual
+        # Ex: =COUNTIF($G$2:G2; G2)
+        formula_estudo = f"=IF(G{xl_row}=\"\"; \"\"; COUNTIF($G$2:G{xl_row}; G{xl_row}))"
+        sheet_analise.write_formula(row, 7, formula_estudo)
+
+    # Formatação visual
+    header_format = workbook.add_format({'bold': True, 'bg_color': '#D7E4BC', 'border': 1})
+    sheet_analise.set_column('A:F', 8)
+    sheet_analise.set_column('G:H', 15)
+
+print(f"Planilha '{file_name}' gerada com sucesso com as abas SORTEIO e ANALISE!")
