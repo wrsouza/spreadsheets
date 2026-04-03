@@ -5,7 +5,7 @@ import numpy as np
 file_name = 'Planilha_Sorteio_Numerica_V6.xlsx'
 num_rows = 4000
 
-# 1. Gerar Dados Aleatórios para teste (Apenas SORT e 1)
+# 1. Gerar Dados Aleatórios para teste (Apenas SORT e Coluna 1)
 data_sorteio = {
     'SORT': list(range(1, num_rows + 1)),
     '1': [1 if val else None for val in np.random.choice([True, False], num_rows)]
@@ -26,7 +26,7 @@ with pd.ExcelWriter(file_name, engine='xlsxwriter') as writer:
     fmt_header = workbook.add_format({'bold': True, 'bg_color': '#D7E4BC', 'border': 1, 'align': 'center'})
 
     # --- ABA ANALISE ---
-    # Coluna D (AUSENCIA) serve como base para a última coluna da aba ESTATISTICA
+    # A=SORT, B=1, C=CONTAGEM (Acertos), D=AUSENCIA (Vazios)
     headers_an = ['SORT', '1', 'CONTAGEM', 'AUSENCIA']
     for c, h in enumerate(headers_an): 
         sheet_analise.write(0, c, h, fmt_header)
@@ -37,7 +37,7 @@ with pd.ExcelWriter(file_name, engine='xlsxwriter') as writer:
         sheet_analise.write_formula(r, 0, f"=SORTEIO!A{xl_r}")
         sheet_analise.write_formula(r, 1, f"=SORTEIO!B{xl_r}")
         
-        # Lógica de Acerto (C) e Ausência (D)
+        # Lógica de Sequência de Acerto (Coluna C) e Ausência (Coluna D)
         if r == 1:
             f_contagem = f"=IF(B{xl_r}<>\"\"; 1; 0)"
             f_ausencia = f"=IF(B{xl_r}=\"\"; 1; 0)"
@@ -49,8 +49,11 @@ with pd.ExcelWriter(file_name, engine='xlsxwriter') as writer:
         sheet_analise.write_formula(r, 3, f_ausencia, fmt_int)
 
     # --- ABA ESTATISTICA ---
-    # Ordem: SEQ(A), SAIU(B), FREQ(C), ULT(D), FALTA(E), NAO SAIU(F)
-    headers_es = ['SEQUENCIA', 'SAIU', 'FREQUENCIA', 'ULTIMO', 'FALTA', 'NAO SAIU']
+    # Estrutura: SEQ | SAIU | FREQ | ULT | FALTA | NAO SAIU | FREQ(NS) | ULT(NS)
+    headers_es = [
+        'SEQUENCIA', 'SAIU', 'FREQUENCIA', 'ULTIMO', 'FALTA', 
+        'NAO SAIU', 'FREQUENCIA', 'ULTIMO'
+    ]
     for c, h in enumerate(headers_es): 
         sheet_est.write(0, c, h, fmt_header)
 
@@ -58,33 +61,44 @@ with pd.ExcelWriter(file_name, engine='xlsxwriter') as writer:
         r = i 
         xl_r = r + 1
         
-        # A: SEQUENCIA
+        # A: SEQUENCIA (1 a 20)
         sheet_est.write(r, 0, i, fmt_int)
         
-        # B: SAIU (Baseado na coluna C da ANALISE)
+        # --- BLOCO DE ACERTOS (SAIU) ---
+        # B: SAIU (Quantas vezes a sequência de acertos ocorreu)
         f_saiu = f"=COUNTIF(ANALISE!$C$2:$C${num_rows+1}; A{xl_r})"
         sheet_est.write_formula(r, 1, f_saiu, fmt_int)
         
-        # C: FREQUENCIA (Baseado na coluna B)
-        f_freq = f"=IF(B{xl_r}=0; 0; INT({num_rows}/B{xl_r}))"
-        sheet_est.write_formula(r, 2, f_freq, fmt_int)
+        # C: FREQUENCIA (Média de acertos)
+        f_freq_s = f"=IF(B{xl_r}=0; 0; INT({num_rows}/B{xl_r}))"
+        sheet_est.write_formula(r, 2, f_freq_s, fmt_int)
         
-        # D: ULTIMO (Baseado na coluna C da ANALISE)
-        f_ultimo = f"=IF(B{xl_r}=0; 0; MAXIFS(ANALISE!$A$2:$A${num_rows+1}; ANALISE!$C$2:$C${num_rows+1}; A{xl_r}))"
-        sheet_est.write_formula(r, 3, f_ultimo, fmt_int)
+        # D: ULTIMO (Último sorteio do acerto)
+        f_ult_s = f"=IF(B{xl_r}=0; 0; MAXIFS(ANALISE!$A$2:$A${num_rows+1}; ANALISE!$C$2:$C${num_rows+1}; A{xl_r}))"
+        sheet_est.write_formula(r, 3, f_ult_s, fmt_int)
         
-        # E: FALTA (Distância do Último sorteio de acerto)
+        # E: FALTA (Distância do último acerto)
         f_falta = f"=IF(D{xl_r}=0; {num_rows}; {num_rows} - D{xl_r})"
         sheet_est.write_formula(r, 4, f_falta, fmt_int)
 
-        # F: NAO SAIU (Baseado na coluna D da ANALISE - Agora no final)
+        # --- BLOCO DE AUSÊNCIAS (NAO SAIU) ---
+        # F: NAO SAIU (Quantas vezes a sequência de vazios ocorreu)
         f_nao_saiu = f"=COUNTIF(ANALISE!$D$2:$D${num_rows+1}; A{xl_r})"
         sheet_est.write_formula(r, 5, f_nao_saiu, fmt_int)
 
-    # Ajustes de layout
+        # G: FREQUENCIA (Média de ausências baseada na coluna F)
+        f_freq_ns = f"=IF(F{xl_r}=0; 0; INT({num_rows}/F{xl_r}))"
+        sheet_est.write_formula(r, 6, f_freq_ns, fmt_int)
+
+        # H: ULTIMO (Último sorteio da ausência baseada na coluna D da ANALISE)
+        f_ult_ns = f"=IF(F{xl_r}=0; 0; MAXIFS(ANALISE!$A$2:$A${num_rows+1}; ANALISE!$D$2:$D${num_rows+1}; A{xl_r}))"
+        sheet_est.write_formula(r, 7, f_ult_ns, fmt_int)
+
+    # Ajustes de layout e largura de colunas
     sheet_sorteio = writer.sheets['SORTEIO']
     sheet_sorteio.set_column('A:B', 10, fmt_int)
     sheet_analise.set_column('A:D', 12, fmt_int)
-    sheet_est.set_column('A:F', 15, fmt_int)
+    sheet_est.set_column('A:H', 15, fmt_int)
 
-print(f"Planilha '{file_name}' gerada com sucesso com a coluna 'NAO SAIU' na posição final (F).")
+print(f"Planilha '{file_name}' gerada com sucesso!")
+print("Estatísticas de Acertos (B-E) e Ausências (F-H) configuradas.")
