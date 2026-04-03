@@ -26,59 +26,65 @@ with pd.ExcelWriter(file_name, engine='xlsxwriter') as writer:
     fmt_header = workbook.add_format({'bold': True, 'bg_color': '#D7E4BC', 'border': 1, 'align': 'center'})
 
     # --- ABA ANALISE ---
-    headers_an = ['SORT', '1', 'CONTAGEM']
+    # Coluna D (AUSENCIA) serve como base para a última coluna da aba ESTATISTICA
+    headers_an = ['SORT', '1', 'CONTAGEM', 'AUSENCIA']
     for c, h in enumerate(headers_an): 
         sheet_analise.write(0, c, h, fmt_header)
 
     for r in range(1, num_rows + 1):
-        xl_r = r + 1 # Linha atual no Excel
+        xl_r = r + 1 
         
         sheet_analise.write_formula(r, 0, f"=SORTEIO!A{xl_r}")
         sheet_analise.write_formula(r, 1, f"=SORTEIO!B{xl_r}")
         
-        # Coluna C: Lógica de Streak (Sequência)
+        # Lógica de Acerto (C) e Ausência (D)
         if r == 1:
             f_contagem = f"=IF(B{xl_r}<>\"\"; 1; 0)"
+            f_ausencia = f"=IF(B{xl_r}=\"\"; 1; 0)"
         else:
             f_contagem = f"=IF(B{xl_r}<>\"\"; C{xl_r-1} + 1; 0)"
+            f_ausencia = f"=IF(B{xl_r}=\"\"; D{xl_r-1} + 1; 0)"
             
         sheet_analise.write_formula(r, 2, f_contagem, fmt_int)
+        sheet_analise.write_formula(r, 3, f_ausencia, fmt_int)
 
     # --- ABA ESTATISTICA ---
-    headers_es = ['SEQUENCIA', 'SAIU', 'FREQUENCIA', 'ULTIMO', 'FALTA']
+    # Ordem: SEQ(A), SAIU(B), FREQ(C), ULT(D), FALTA(E), NAO SAIU(F)
+    headers_es = ['SEQUENCIA', 'SAIU', 'FREQUENCIA', 'ULTIMO', 'FALTA', 'NAO SAIU']
     for c, h in enumerate(headers_es): 
         sheet_est.write(0, c, h, fmt_header)
 
-    # Gerar de 1 a 20
     for i in range(1, 21):
         r = i 
         xl_r = r + 1
         
-        # Coluna A: A sequência (1, 2, 3... 20)
+        # A: SEQUENCIA
         sheet_est.write(r, 0, i, fmt_int)
         
-        # Coluna B: SAIU (Quantas vezes essa sequência específica foi atingida)
-        # Analisa a coluna C da aba ANALISE
+        # B: SAIU (Baseado na coluna C da ANALISE)
         f_saiu = f"=COUNTIF(ANALISE!$C$2:$C${num_rows+1}; A{xl_r})"
         sheet_est.write_formula(r, 1, f_saiu, fmt_int)
         
-        # Coluna C: FREQUENCIA (Média de sorteios para cada ocorrência)
+        # C: FREQUENCIA (Baseado na coluna B)
         f_freq = f"=IF(B{xl_r}=0; 0; INT({num_rows}/B{xl_r}))"
         sheet_est.write_formula(r, 2, f_freq, fmt_int)
         
-        # Coluna D: ULTIMO (O número do sorteio/SORT da última vez que atingiu essa sequência)
+        # D: ULTIMO (Baseado na coluna C da ANALISE)
         f_ultimo = f"=IF(B{xl_r}=0; 0; MAXIFS(ANALISE!$A$2:$A${num_rows+1}; ANALISE!$C$2:$C${num_rows+1}; A{xl_r}))"
         sheet_est.write_formula(r, 3, f_ultimo, fmt_int)
         
-        # Coluna E: FALTA (Distância do último sorteio para o sorteio atual)
+        # E: FALTA (Distância do Último sorteio de acerto)
         f_falta = f"=IF(D{xl_r}=0; {num_rows}; {num_rows} - D{xl_r})"
         sheet_est.write_formula(r, 4, f_falta, fmt_int)
 
-    # Ajustes finais de layout
+        # F: NAO SAIU (Baseado na coluna D da ANALISE - Agora no final)
+        f_nao_saiu = f"=COUNTIF(ANALISE!$D$2:$D${num_rows+1}; A{xl_r})"
+        sheet_est.write_formula(r, 5, f_nao_saiu, fmt_int)
+
+    # Ajustes de layout
     sheet_sorteio = writer.sheets['SORTEIO']
     sheet_sorteio.set_column('A:B', 10, fmt_int)
-    sheet_analise.set_column('A:C', 12, fmt_int)
-    sheet_est.set_column('A:E', 15, fmt_int)
+    sheet_analise.set_column('A:D', 12, fmt_int)
+    sheet_est.set_column('A:F', 15, fmt_int)
 
-print(f"Planilha '{file_name}' gerada com sucesso!")
-print("Aba ESTATISTICA agora analisa sequências de 1 a 20.")
+print(f"Planilha '{file_name}' gerada com sucesso com a coluna 'NAO SAIU' na posição final (F).")
